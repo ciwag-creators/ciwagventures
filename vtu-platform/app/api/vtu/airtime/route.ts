@@ -1,18 +1,21 @@
 import supabaseAdmin from '@/lib/supabase/admin'
+import { logWalletAction } from '@/lib/vtu/audit'
+import vtuProvider from '@/lib/vtu'
 
 export async function POST(req: Request) {
   try {
+    /* ---------------- 0. PARSE BODY ---------------- */
     const body = await req.json()
-    const { user_id, network, phone, amount } = body
+    const { user_id, network, phone, amount, reference } = body
 
-    if (!user_id || !network || !phone || !amount) {
+    if (!user_id || !network || !phone || !amount || !reference) {
       return Response.json(
         { error: 'Missing required fields' },
         { status: 400 }
       )
     }
 
-    /* ---------------- FETCH WALLET ---------------- */
+    /* ---------------- 1. FETCH WALLET ---------------- */
     const { data: wallet, error: walletError } = await supabaseAdmin
       .from('wallets')
       .select('*')
@@ -30,9 +33,23 @@ export async function POST(req: Request) {
       )
     }
 
-    const reference = `AIR-${Date.now()}`
+    /* ---------------- 2. IDEMPOTENCY CHECK ---------------- */
+    const { data: existingTx } = await supabaseAdmin
+      .from('transactions')
+      .select('*')
+      .eq('reference', reference)
+      .single()
 
-    /* ---------------- CREATE TRANSACTION ---------------- */
+    if (existingTx) {
+      return Response.json({
+        success: existingTx.status === 'success',
+        reference: existingTx.reference,
+        status: existingTx.status,
+        new_balance: wallet.balance
+      })
+    }
+
+    /* ---------------- 3. CREATE TRANSACTION ---------------- */
     const { data: transaction, error: txError } = await supabaseAdmin
       .from('transactions')
       .insert({
@@ -53,20 +70,37 @@ export async function POST(req: Request) {
     }
 
     try {
-      /* ---------------- DEDUCT WALLET ---------------- */
+      /* ---------------- 4. DEDUCT WALLET ---------------- */
+      const balanceBefore = wallet.balance
+      const balanceAfter = wallet.balance - amount
+
       await supabaseAdmin
         .from('wallets')
-        .update({ balance: wallet.balance - amount })
+        .update({ balance: balanceAfter })
         .eq('id', wallet.id)
 
-      /* ---------------- SIMULATE VTU PROVIDER ---------------- */
-      const vtuSuccess = true // replace later with real provider call
+      await logWalletAction({
+        user_id,
+        action: 'airtime_debit',
+        amount,
+        balance_before: balanceBefore,
+        balance_after: balanceAfter,
+        reference
+      })
 
-      if (!vtuSuccess) {
+      /* ---------------- 5. VTU PROVIDER ---------------- */
+      const result = await vtuProvider.airtime({
+        network,
+        phone,
+        amount,
+        reference
+      })
+
+      if (!result.success) {
         throw new Error('VTU_PROVIDER_FAILED')
       }
 
-      /* ---------------- MARK SUCCESS ---------------- */
+      /* ---------------- 6. MARK SUCCESS ---------------- */
       await supabaseAdmin
         .from('transactions')
         .update({ status: 'success' })
@@ -75,17 +109,27 @@ export async function POST(req: Request) {
       return Response.json({
         success: true,
         reference,
-        new_balance: wallet.balance - amount
+        new_balance: balanceAfter
       })
 
     } catch (err) {
       console.error('❌ VTU failed, refunding...', err)
 
-      /* ---------------- REFUND ---------------- */
+      /* ---------------- 7. REFUND ---------------- */
       await supabaseAdmin
         .from('wallets')
         .update({ balance: wallet.balance })
         .eq('id', wallet.id)
+
+      await logWalletAction({
+        user_id,
+        action: 'airtime_refund',
+        amount,
+        balance_before: wallet.balance - amount,
+        balance_after: wallet.balance,
+        reference,
+        metadata: { reason: 'VTU_PROVIDER_FAILED' }
+      })
 
       await supabaseAdmin
         .from('transactions')
@@ -97,6 +141,7 @@ export async function POST(req: Request) {
         { status: 500 }
       )
     }
+
   } catch (err) {
     console.error('❌ Server error:', err)
     return Response.json({ error: 'Server error' }, { status: 500 })

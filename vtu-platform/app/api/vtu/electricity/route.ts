@@ -4,11 +4,16 @@ import vtuProvider from '@/lib/vtu'
 
 export async function POST(req: Request) {
   try {
-    /* ---------------- 0. PARSE BODY ---------------- */
     const body = await req.json()
-    const { user_id, network, phone, planId, amount, reference } = body
+    const {
+      user_id,
+      provider,
+      meterNumber,
+      amount,
+      reference
+    } = body
 
-    if (!user_id || !network || !phone || !planId || !amount || !reference) {
+    if (!user_id || !provider || !meterNumber || !amount || !reference) {
       return Response.json(
         { error: 'Missing required fields' },
         { status: 400 }
@@ -16,24 +21,20 @@ export async function POST(req: Request) {
     }
 
     /* ---------------- 1. FETCH WALLET ---------------- */
-    const { data: wallet, error: walletError } = await supabaseAdmin
+    const { data: wallet } = await supabaseAdmin
       .from('wallets')
       .select('*')
       .eq('user_id', user_id)
       .single()
 
-    if (walletError || !wallet) {
-      return Response.json({ error: 'Wallet not found' }, { status: 404 })
-    }
-
-    if (wallet.balance < amount) {
+    if (!wallet || wallet.balance < amount) {
       return Response.json(
         { error: 'Insufficient balance' },
         { status: 400 }
       )
     }
 
-    /* ---------------- 2. IDEMPOTENCY CHECK ---------------- */
+    /* ---------------- 2. IDEMPOTENCY ---------------- */
     const { data: existingTx } = await supabaseAdmin
       .from('transactions')
       .select('*')
@@ -50,28 +51,21 @@ export async function POST(req: Request) {
     }
 
     /* ---------------- 3. CREATE TRANSACTION ---------------- */
-    const { data: transaction, error: txError } = await supabaseAdmin
+    const { data: transaction } = await supabaseAdmin
       .from('transactions')
       .insert({
         user_id,
         amount,
-        service: 'data',
+        service: 'electricity',
         status: 'pending',
         reference,
-        metadata: { network, phone, planId }
+        metadata: { provider, meterNumber }
       })
       .select()
       .single()
 
-    if (txError || !transaction) {
-      return Response.json(
-        { error: 'Failed to create transaction' },
-        { status: 500 }
-      )
-    }
-
     try {
-      /* ---------------- 4. DEDUCT WALLET ---------------- */
+      /* ---------------- 4. DEBIT WALLET ---------------- */
       const balanceBefore = wallet.balance
       const balanceAfter = wallet.balance - amount
 
@@ -82,42 +76,41 @@ export async function POST(req: Request) {
 
       await logWalletAction({
         user_id,
-        action: 'data_debit',
+        action: 'electricity_debit',
         amount,
         balance_before: balanceBefore,
         balance_after: balanceAfter,
-        reference,
-        metadata: { network, phone, planId }
+        reference
       })
 
-      /* ---------------- 5. VTU PROVIDER ---------------- */
-      const result = await vtuProvider.data({
-        network,
-        phone,
-        planId,
+      /* ---------------- 5. PROVIDER ---------------- */
+      const result = await vtuProvider.bill({
+        service: 'electricity',
+        provider,
+        meterNumber,
         amount,
         reference
       })
 
-      if (!result.success) {
-        throw new Error('VTU_PROVIDER_FAILED')
-      }
+      if (!result.success) throw new Error('PROVIDER_FAILED')
 
-      /* ---------------- 6. MARK SUCCESS ---------------- */
+      /* ---------------- 6. SUCCESS ---------------- */
       await supabaseAdmin
         .from('transactions')
-        .update({ status: 'success' })
+        .update({
+          status: 'success',
+          metadata: { token: result.token }
+        })
         .eq('id', transaction.id)
 
       return Response.json({
         success: true,
         reference,
+        token: result.token,
         new_balance: balanceAfter
       })
 
     } catch (err) {
-      console.error('❌ VTU failed, refunding...', err)
-
       /* ---------------- 7. REFUND ---------------- */
       await supabaseAdmin
         .from('wallets')
@@ -126,12 +119,11 @@ export async function POST(req: Request) {
 
       await logWalletAction({
         user_id,
-        action: 'data_refund',
+        action: 'electricity_refund',
         amount,
         balance_before: wallet.balance - amount,
         balance_after: wallet.balance,
-        reference,
-        metadata: { reason: 'VTU_PROVIDER_FAILED' }
+        reference
       })
 
       await supabaseAdmin
@@ -140,13 +132,12 @@ export async function POST(req: Request) {
         .eq('id', transaction.id)
 
       return Response.json(
-        { error: 'VTU failed. Wallet refunded.' },
+        { error: 'Payment failed. Wallet refunded.' },
         { status: 500 }
       )
     }
 
   } catch (err) {
-    console.error('❌ Server error:', err)
     return Response.json({ error: 'Server error' }, { status: 500 })
   }
 }
