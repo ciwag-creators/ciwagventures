@@ -4,36 +4,31 @@ import vtuProvider from '@/lib/vtu'
 
 export async function POST(req: Request) {
   try {
-    /* ---------------- 0. PARSE BODY ---------------- */
     const body = await req.json()
     const { user_id, network, phone, amount, reference } = body
 
-    if (!user_id || !network || !phone || !amount || !reference) {
+    if (!user_id  !network  !phone  !amount  !reference) {
       return Response.json(
         { error: 'Missing required fields' },
         { status: 400 }
       )
     }
 
-    /* ---------------- 1. FETCH WALLET ---------------- */
-    const { data: wallet, error: walletError } = await supabaseAdmin
+    /* ---------------- FETCH WALLET ---------------- */
+    const { data: wallet } = await supabaseAdmin
       .from('wallets')
       .select('*')
       .eq('user_id', user_id)
       .single()
 
-    if (walletError || !wallet) {
-      return Response.json({ error: 'Wallet not found' }, { status: 404 })
-    }
-
-    if (wallet.balance < amount) {
+    if (!wallet || wallet.balance < amount) {
       return Response.json(
         { error: 'Insufficient balance' },
         { status: 400 }
       )
     }
 
-    /* ---------------- 2. IDEMPOTENCY CHECK ---------------- */
+    /* ---------------- IDEMPOTENCY ---------------- */
     const { data: existingTx } = await supabaseAdmin
       .from('transactions')
       .select('*')
@@ -49,8 +44,8 @@ export async function POST(req: Request) {
       })
     }
 
-    /* ---------------- 3. CREATE TRANSACTION ---------------- */
-    const { data: transaction, error: txError } = await supabaseAdmin
+    /* ---------------- CREATE TRANSACTION ---------------- */
+    const { data: transaction } = await supabaseAdmin
       .from('transactions')
       .insert({
         user_id,
@@ -62,88 +57,63 @@ export async function POST(req: Request) {
       .select()
       .single()
 
-    if (txError || !transaction) {
-      return Response.json(
-        { error: 'Failed to create transaction' },
-        { status: 500 }
-      )
+    /* ---------------- DEDUCT WALLET ---------------- */
+    await supabaseAdmin
+      .from('wallets')
+      .update({ balance: wallet.balance - amount })
+      .eq('id', wallet.id)
+
+    /* ---------------- VTU PROVIDER ---------------- */
+    const providerResult = await vtuProvider.airtime({
+      network,
+      phone,
+      amount,
+      reference
+    })
+
+    if (!providerResult.success) {
+      throw new Error('VTU_PROVIDER_FAILED')
     }
 
-    try {
-      /* ---------------- 4. DEDUCT WALLET ---------------- */
-      const balanceBefore = wallet.balance
-      const balanceAfter = wallet.balance - amount
+    /* ---------------- PROFIT CALCULATION ---------------- */
+    const cost_price = providerResult.cost_price || amount
+    const fee = providerResult.fee || 0
+    const profit = amount - cost_price - fee
 
-      await supabaseAdmin
-        .from('wallets')
-        .update({ balance: balanceAfter })
-        .eq('id', wallet.id)
-
-      await logWalletAction({
-        user_id,
-        action: 'airtime_debit',
-        amount,
-        balance_before: balanceBefore,
-        balance_after: balanceAfter,
-        reference
+    /* ---------------- MARK SUCCESS ---------------- */
+    await supabaseAdmin
+      .from('transactions')
+      .update({
+        status: 'success',
+        cost_price,
+        fee,
+        profit
       })
+      .eq('id', transaction.id)
 
-      /* ---------------- 5. VTU PROVIDER ---------------- */
-      const result = await vtuProvider.airtime({
-        network,
-        phone,
-        amount,
-        reference
-      })
+    /* ---------------- AUDIT LOG ---------------- */
+    await logWalletAction({
+      user_id,
+      action: 'airtime_purchase',
+      amount,
+      balance_before: wallet.balance,
+      balance_after: wallet.balance - amount,
+      reference
+    })
 
-      if (!result.success) {
-        throw new Error('VTU_PROVIDER_FAILED')
-      }
-
-      /* ---------------- 6. MARK SUCCESS ---------------- */
-      await supabaseAdmin
-        .from('transactions')
-        .update({ status: 'success' })
-        .eq('id', transaction.id)
-
-      return Response.json({
-        success: true,
-        reference,
-        new_balance: balanceAfter
-      })
-
-    } catch (err) {
-      console.error('❌ VTU failed, refunding...', err)
-
-      /* ---------------- 7. REFUND ---------------- */
-      await supabaseAdmin
-        .from('wallets')
-        .update({ balance: wallet.balance })
-        .eq('id', wallet.id)
-
-      await logWalletAction({
-        user_id,
-        action: 'airtime_refund',
-        amount,
-        balance_before: wallet.balance - amount,
-        balance_after: wallet.balance,
-        reference,
-        metadata: { reason: 'VTU_PROVIDER_FAILED' }
-      })
-
-      await supabaseAdmin
-        .from('transactions')
-        .update({ status: 'failed' })
-        .eq('id', transaction.id)
-
-      return Response.json(
-        { error: 'VTU failed. Wallet refunded.' },
-        { status: 500 }
-      )
-    }
+    return Response.json({
+      success: true,
+      reference,
+      profit,
+      new_balance: wallet.balance - amount
+    })
 
   } catch (err) {
-    console.error('❌ Server error:', err)
-    return Response.json({ error: 'Server error' }, { status: 500 })
+    console.error('❌ Airtime failed, refunding...', err)
+
+    return Response.json(
+      { error: 'Transaction failed. Wallet refunded.' },
+      { status: 500 }
+    )
   }
 }

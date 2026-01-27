@@ -40,7 +40,7 @@ export async function POST(req: Request) {
       .select('*')
       .eq('reference', reference)
       .single()
-
+  
     if (existingTx) {
       return Response.json({
         success: existingTx.status === 'success',

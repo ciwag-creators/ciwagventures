@@ -1,11 +1,11 @@
-export interface AirtimePayload {
+export interface AirtimeRequest {
   network: string
   phone: string
   amount: number
   reference: string
 }
 
-export interface DataPayload {
+export interface DataRequest {
   network: string
   phone: string
   planId: string
@@ -13,13 +13,20 @@ export interface DataPayload {
   reference: string
 }
 
-export interface VTUResponse {
-  success: boolean
-  provider_reference?: string
-  message?: string
+export interface BillRequest {
+  service: 'electricity' | 'tv'
+  provider: string
+  meterNumber?: string
+  smartCardNumber?: string
+  amount: number
+  reference: string
 }
 
-export interface VTUProvider {
-  airtime(payload: AirtimePayload): Promise<VTUResponse>
-  data(payload: DataPayload): Promise<VTUResponse>
+export interface VTUResponse {
+  success: boolean
+  message?: string
+  cost_price?: number
+  fee?: number
+  token?: string
+  raw?: any
 }
