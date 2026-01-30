@@ -1,41 +1,35 @@
 import supabaseAdmin from '@/lib/supabase/admin'
+import { requireAdmin } from '@/lib/admin-auth'
 
-export async function GET(req: Request) {
+export async function GET() {
   try {
-    const { searchParams } = new URL(req.url)
-    const user_id = searchParams.get('user_id')
+    await requireAdmin()
 
-    if (!user_id) {
-      return Response.json(
-        { error: 'user_id is required' },
-        { status: 400 }
-      )
-    }
-
-    const { data: transactions, error } = await supabaseAdmin
+    const { data, error } = await supabaseAdmin
       .from('transactions')
-      .select('*')
-      .eq('user_id', user_id)
+      .select(`
+        id,
+        user_id,
+        service,
+        amount,
+        status,
+        reference,
+        created_at
+      `)
       .order('created_at', { ascending: false })
 
     if (error) {
-      console.error('❌ Fetch transactions error:', error)
       return Response.json(
-        { error: 'Failed to fetch transactions' },
+        { error: error.message },
         { status: 500 }
       )
     }
 
-    return Response.json({
-      success: true,
-      transactions
-    })
-
-  } catch (err) {
-    console.error('❌ Server error:', err)
+    return Response.json({ data })
+  } catch (err: any) {
     return Response.json(
-      { error: 'Server error' },
-      { status: 500 }
+      { error: err.message },
+      { status: 401 }
     )
   }
 }

@@ -1,26 +1,62 @@
 import supabaseAdmin from '@/lib/supabase/admin'
-
-await requireAdmin()
+import { requireAdmin } from '@/lib/admin-auth'
 
 export async function GET() {
-  const { data, error } = await supabaseAdmin
-    .from('transactions')
-    .select('amount, profit, status')
+  try {
+    // 🔐 Admin auth check
+    await requireAdmin()
 
-  if (error) {
-    return Response.json({ error: error.message }, { status: 500 })
+    /* ---------------- DAILY REVENUE ---------------- */
+    const { data: revenueData, error: revenueError } = await supabaseAdmin
+      .from('transactions')
+      .select('created_at, amount')
+      .eq('status', 'success')
+
+    if (revenueError) {
+      throw revenueError
+    }
+
+    const dailyRevenueMap: Record<string, number> = {}
+
+    revenueData.forEach(tx => {
+      const date = tx.created_at.split('T')[0]
+      dailyRevenueMap[date] = (dailyRevenueMap[date] || 0) + tx.amount
+    })
+
+    const daily_revenue = Object.entries(dailyRevenueMap).map(
+      ([date, total]) => ({ date, total })
+    )
+
+    /* ---------------- DAILY TRANSACTIONS ---------------- */
+    const { data: txData, error: txError } = await supabaseAdmin
+      .from('transactions')
+      .select('created_at')
+
+    if (txError) {
+      throw txError
+    }
+
+    const dailyTxMap: Record<string, number> = {}
+
+    txData.forEach(tx => {
+      const date = tx.created_at.split('T')[0]
+      dailyTxMap[date] = (dailyTxMap[date] || 0) + 1
+    })
+
+    const daily_transactions = Object.entries(dailyTxMap).map(
+      ([date, total]) => ({ date, total })
+    )
+
+    return Response.json({
+      daily_revenue,
+      daily_transactions
+    })
+
+  } catch (err: any) {
+    console.error('❌ Admin stats error:', err)
+    return Response.json(
+      { error: err.message || 'Unauthorized' },
+      { status: 401 }
+    )
   }
-
-  const totalVolume = data.reduce((sum, tx) => sum + tx.amount, 0)
-  const totalProfit = data.reduce((sum, tx) => sum + (tx.profit || 0), 0)
-  const successCount = data.filter(tx => tx.status === 'success').length
-  const failedCount = data.filter(tx => tx.status === 'failed').length
-
-  return Response.json({
-    total_transactions: data.length,
-    successful: successCount,
-    failed: failedCount,
-    total_volume: totalVolume,
-    total_profit: totalProfit
-  })
 }
