@@ -2,9 +2,6 @@ import RevenueChart from '@/components/charts/RevenueChart'
 import DailyTransactions from '@/components/charts/DailyTransactions'
 import TransactionsTable from '@/components/charts/TransactionsTable'
 import { requireAdmin } from '@/lib/admin-auth'
-import ProfitChart from '@/components/charts/ProfitChart'
-import StatCard from '@/components/admin/StatCard'
-import { ArrowUpRight, Clock, CheckCircle } from 'lucide-react'
 
 type RevenueItem = {
   date: string
@@ -55,7 +52,6 @@ export default async function AdminDashboard() {
   }))
 
   const transactionData: TransactionItem[] = stats.daily_transactions || transactions
-const profitData = stats.daily_profit
 
   return (
     <div className="p-6 space-y-8">
@@ -66,14 +62,6 @@ const profitData = stats.daily_profit
         <h2 className="text-lg font-semibold mb-4">Daily Revenue</h2>
         <RevenueChart data={revenueData} />
       </div>
-
-{/* Profit Chart */}
-<div className="bg-white rounded-xl shadow p-4">
-  <h2 className="text-lg font-semibold mb-4">
-    Daily Profit
-  </h2>
-  <ProfitChart data={profitData} />
-</div>
 
       {/* Daily Transactions Chart */}
       <div className="bg-white rounded-xl shadow p-4">
@@ -88,55 +76,4 @@ const profitData = stats.daily_profit
       </div>
     </div>
   )
-
-  return (
-  <div className="p-6 space-y-8">
-    <h1 className="text-2xl font-bold">Admin Dashboard</h1>
-
-    {/* KPI CARDS */}
-    <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-      <StatCard
-        title="Total Revenue"
-        value={₦${stats.total_revenue.toLocaleString()}}
-        icon={<ArrowUpRight />}
-      />
-      <StatCard
-        title="Total Transactions"
-        value={stats.total_transactions}
-      />
-      <StatCard
-        title="Successful"
-        value={stats.successful_transactions}
-        icon={<CheckCircle />}
-      />
-      <StatCard
-        title="Pending"
-        value={stats.pending_transactions}
-        icon={<Clock />}
-      />
-    </div>
-
-    {/* Revenue Chart */}
-    <div className="bg-white rounded-xl shadow p-4">
-      <h2 className="text-lg font-semibold mb-4">Daily Revenue</h2>
-      <RevenueChart data={revenueData} />
-    </div>
-
-    {/* Transactions Chart */}
-    <div className="bg-white rounded-xl shadow p-4">
-      <h2 className="text-lg font-semibold mb-4">
-        Daily Transactions
-      </h2>
-      <DailyTransactions data={transactionData} />
-    </div>
-
-    {/* Transactions Table */}
-    <div className="bg-white rounded-xl shadow p-4">
-      <h2 className="text-lg font-semibold mb-4">
-        Recent Transactions
-      </h2>
-      <TransactionsTable data={transactions} />
-    </div>
-  </div>
-)
 }
