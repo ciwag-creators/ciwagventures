@@ -1,34 +1,28 @@
+import TransactionsTable from '@/components/charts/TransactionsTable'
+
 async function getTransactions() {
-  const res = await fetch(
-    ${process.env.NEXT_PUBLIC_BASE_URL}/api/admin/transactions,
-    { cache: 'no-store' }
-  )
-  return res.json()
+  const res = await fetch('/api/admin/transactions', {
+    cache: 'no-store'
+  })
+
+  if (!res.ok) {
+    throw new Error('Failed to fetch transactions')
+  }
+
+  const json = await res.json()
+  return json.data
 }
 
-export default async function TransactionsPage() {
-  const { data } = await getTransactions()
+export default async function AdminTransactions() {
+  const transactions = await getTransactions()
 
   return (
-    <table className="w-full bg-white rounded shadow">
-      <thead>
-        <tr>
-          <th>Reference</th>
-          <th>Service</th>
-          <th>Amount</th>
-          <th>Status</th>
-        </tr>
-      </thead>
-      <tbody>
-        {data.map((t: any) => (
-          <tr key={t.id}>
-            <td>{t.reference}</td>
-            <td>{t.service}</td>
-            <td>₦{t.amount}</td>
-            <td>{t.status}</td>
-          </tr>
-        ))}
-      </tbody>
-    </table>
+    <div className="space-y-6">
+      <h1 className="text-2xl font-bold">Transactions</h1>
+
+      <div className="bg-white rounded-xl shadow p-4">
+        <TransactionsTable data={transactions} />
+      </div>
+    </div>
   )
 }

@@ -2,41 +2,19 @@ import supabaseAdmin from '@/lib/supabase/admin'
 import { requireAdmin } from '@/lib/admin-auth'
 
 export async function GET() {
-  try {
-    // 🔐 Admin guard
-    await requireAdmin()
+  await requireAdmin()
 
-    const { data, error } = await supabaseAdmin
-      .from('wallets')
-      .select(
-        id,
-        user_id,
-        balance,
-        created_at
-      )
-      .order('created_at', { ascending: false })
+  const { data, error } = await supabaseAdmin
+    .from('wallets')
+    .select('*')
+    .order('created_at', { ascending: false })
 
-    if (error) {
-      return Response.json(
-        { error: error.message },
-        { status: 500 }
-      )
-    }
-
-    return Response.json({ data })
-
-  } catch (err: any) {
-    if (err.message === 'UNAUTHORIZED') {
-      return Response.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-
-    if (err.message === 'FORBIDDEN') {
-      return Response.json({ error: 'Forbidden' }, { status: 403 })
-    }
-
+  if (error) {
     return Response.json(
-      { error: 'Server error' },
+      { error: error.message },
       { status: 500 }
     )
   }
+
+  return Response.json({ data })
 }

@@ -1,32 +1,28 @@
+import WalletsTable from '@/components/admin/WalletsTable'
+
 async function getWallets() {
-  const res = await fetch(
-    ${process.env.NEXT_PUBLIC_BASE_URL}/api/admin/wallets,
-    { cache: 'no-store' }
-  )
-  return res.json()
+  const res = await fetch('/api/admin/wallets', {
+    cache: 'no-store'
+  })
+
+  if (!res.ok) {
+    throw new Error('Failed to fetch wallets')
+  }
+
+  const json = await res.json()
+  return json.data
 }
 
-export default async function WalletsPage() {
-  const { data } = await getWallets()
+export default async function AdminWallets() {
+  const wallets = await getWallets()
 
   return (
-    <table className="w-full bg-white rounded shadow">
-      <thead>
-        <tr>
-          <th>User</th>
-          <th>Balance</th>
-          <th>Created</th>
-        </tr>
-      </thead>
-      <tbody>
-        {data.map((w: any) => (
-          <tr key={w.id}>
-            <td>{w.user_id}</td>
-            <td>₦{w.balance}</td>
-            <td>{new Date(w.created_at).toLocaleDateString()}</td>
-          </tr>
-        ))}
-      </tbody>
-    </table>
+    <div className="space-y-6">
+      <h1 className="text-2xl font-bold">Wallets</h1>
+
+      <div className="bg-white rounded-xl shadow p-4">
+        <WalletsTable data={wallets} />
+      </div>
+    </div>
   )
 }

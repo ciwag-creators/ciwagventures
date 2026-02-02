@@ -1,26 +1,23 @@
 'use client'
 
-import StatusBadge from '@/components/admin/StatusBadge'
-
-type Transaction = {
+type AuditLog = {
   id: string
-  reference: string
-  service: string
+  user_id: string
+  action: string
   amount: number
-  status: string
+  reference: string
   created_at: string
 }
 
-export default function TransactionsTable({
+export default function AuditLogsTable({
   data
 }: {
-  data: Transaction[]
+  data: AuditLog[]
 }) {
-  // ✅ EMPTY STATE
   if (!data || data.length === 0) {
     return (
       <div className="py-12 text-center text-gray-500">
-        No transactions yet
+        No audit logs yet
       </div>
     )
   }
@@ -29,39 +26,35 @@ export default function TransactionsTable({
     <div className="overflow-x-auto">
       <table className="min-w-full border-collapse">
         <thead>
-          <tr className="border-b bg-gray-50 text-left text-sm text-gray-600">
-            <th className="px-4 py-3">Reference</th>
-            <th className="px-4 py-3">Service</th>
+          <tr className="border-b bg-gray-50 text-sm text-gray-600">
+            <th className="px-4 py-3">User</th>
+            <th className="px-4 py-3">Action</th>
             <th className="px-4 py-3">Amount</th>
-            <th className="px-4 py-3">Status</th>
+            <th className="px-4 py-3">Reference</th>
             <th className="px-4 py-3">Date</th>
           </tr>
         </thead>
 
         <tbody>
-          {data.map(tx => (
+          {data.map(log => (
             <tr
-              key={tx.id}
-              className="border-b text-sm transition hover:bg-gray-50"
+              key={log.id}
+              className="border-b text-sm hover:bg-gray-50"
             >
               <td className="px-4 py-3 font-mono text-xs">
-                {tx.reference}
+                {log.user_id}
               </td>
-
               <td className="px-4 py-3 capitalize">
-                {tx.service}
+                {log.action.replace('_', ' ')}
               </td>
-
               <td className="px-4 py-3 font-medium">
-                ₦{tx.amount.toLocaleString()}
+                ₦{log.amount.toLocaleString()}
               </td>
-
-              <td className="px-4 py-3">
-                <StatusBadge status={tx.status} />
+              <td className="px-4 py-3 font-mono text-xs">
+                {log.reference}
               </td>
-
               <td className="px-4 py-3 text-gray-500">
-                {new Date(tx.created_at).toLocaleDateString()}
+                {new Date(log.created_at).toLocaleDateString()}
               </td>
             </tr>
           ))}

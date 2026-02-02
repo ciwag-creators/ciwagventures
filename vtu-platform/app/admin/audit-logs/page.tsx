@@ -1,34 +1,28 @@
-async function getLogs() {
-  const res = await fetch(
-    `${process.env.NEXT_PUBLIC_BASE_URL}/api/admin/audit-logs`,
-    { cache: 'no-store' }
-  )
-  return res.json()
+import AuditLogsTable from '@/components/admin/AuditLogsTable'
+
+async function getAuditLogs() {
+  const res = await fetch('/api/admin/audit-logs', {
+    cache: 'no-store'
+  })
+
+  if (!res.ok) {
+    throw new Error('Failed to fetch audit logs')
+  }
+
+  const json = await res.json()
+  return json.data
 }
 
-export default async function AuditLogsPage() {
-  const { data } = await getLogs()
+export default async function AdminAuditLogs() {
+  const logs = await getAuditLogs()
 
   return (
-    <table className="w-full bg-white rounded shadow">
-      <thead>
-        <tr>
-          <th>User</th>
-          <th>Action</th>
-          <th>Amount</th>
-          <th>Reference</th>
-        </tr>
-      </thead>
-      <tbody>
-        {data.map((log: any) => (
-          <tr key={log.id}>
-            <td>{log.user_id}</td>
-            <td>{log.action}</td>
-            <td>₦{log.amount}</td>
-            <td>{log.reference}</td>
-          </tr>
-        ))}
-      </tbody>
-    </table>
+    <div className="space-y-6">
+      <h1 className="text-2xl font-bold">Audit Logs</h1>
+
+      <div className="bg-white rounded-xl shadow p-4">
+        <AuditLogsTable data={logs} />
+      </div>
+    </div>
   )
 }
