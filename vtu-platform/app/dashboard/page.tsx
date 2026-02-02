@@ -1,23 +1,26 @@
-import { supabaseServer } from '@/lib/supabase/server'
+import StatCard from '@/components/admin/StatCard'
+import { requireUser } from '@/lib/auth/requireUser'
+import supabaseAdmin from '@/lib/supabase/admin'
 
-export default async function DashboardPage() {
-  const { data: { user } } = await supabaseServer.auth.getUser()
+export default async function UserDashboard() {
+  const user = await requireUser()
 
-  if (!user) {
-    return <p>Please log in</p>
-  }
-
-  const { data: wallet } = await supabaseServer
+  const { data: wallet } = await supabaseAdmin
     .from('wallets')
     .select('balance')
     .eq('user_id', user.id)
     .single()
 
   return (
-    <div>
-      <h1>Dashboard</h1>
-      <p>Email: {user.email}</p>
-      <p>Balance: ₦{wallet?.balance ?? 0}</p>
+    <div className="space-y-6">
+      <h1 className="text-2xl font-bold">
+        Dashboard
+      </h1>
+
+      <StatCard
+        title="Wallet Balance"
+        value={`₦${(wallet?.balance ?? 0).toLocaleString()}`}
+      />
     </div>
   )
 }
