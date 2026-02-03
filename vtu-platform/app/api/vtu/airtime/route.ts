@@ -8,7 +8,7 @@ export async function POST(req: Request) {
     const { user_id, network, phone, amount, reference } = body
 
     /* ---------------- VALIDATION ---------------- */
-    if (!user_id  !network  !phone  !amount  !reference) {
+    if (!user_id || !network || !phone || !amount || !reference) {
       return Response.json(
         { error: 'Missing required fields' },
         { status: 400 }

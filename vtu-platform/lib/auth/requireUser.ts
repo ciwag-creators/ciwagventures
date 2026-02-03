@@ -1,8 +1,16 @@
 import { cookies } from 'next/headers'
-import { createServerComponentClient } from '@supabase/auth-helpers-nextjs'
+import { createServerClient } from '@supabase/ssr'
 
-export async function requireUser() {
-  const supabase = createServerComponentClient({ cookies })
+export async function requireAdmin() {
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        get: name => cookies().get(name)?.value
+      }
+    }
+  )
 
   const {
     data: { user }
@@ -10,6 +18,16 @@ export async function requireUser() {
 
   if (!user) {
     throw new Error('UNAUTHORIZED')
+  }
+
+  const { data: admin } = await supabase
+    .from('admins')
+    .select('id')
+    .eq('id', user.id)
+    .single()
+
+  if (!admin) {
+    throw new Error('FORBIDDEN')
   }
 
   return user

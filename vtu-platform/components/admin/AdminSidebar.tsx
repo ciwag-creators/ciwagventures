@@ -55,13 +55,13 @@ export default function AdminSidebar() {
             <Link
               key={item.href}
               href={item.href}
-              className={flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition
+              className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition
                 ${
                   isActive
                     ? 'bg-gray-100 text-black font-medium'
                     : 'text-gray-600 hover:bg-gray-50'
                 }
-              }
+              `}
             >
               <Icon size={18} />
               {item.label}

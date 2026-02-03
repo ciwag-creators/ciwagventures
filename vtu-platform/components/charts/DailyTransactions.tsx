@@ -57,7 +57,7 @@ export default function DailyTransactions({ data }: Props) {
             />
 
             <Tooltip
-              formatter={(value: number) => [${value}, 'Transactions']}
+             formatter={(value: number) => [value, 'Transactions']}
               labelFormatter={(label) =>
                 new Date(label).toDateString()
               }

@@ -31,8 +31,11 @@ export async function GET() {
       )
       .eq('status', 'success')
 
-    const totalRevenue =
-      transactions?.reduce((sum, t) => sum + (t.profit  0), 0)  0
+const totalRevenue =
+  transactions?.reduce(
+    (sum, t) => sum + (t.profit || 0),
+    0
+  ) || 0
 
     /* ---------------- TODAY STATS ---------------- */
     const today = new Date()

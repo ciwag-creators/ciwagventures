@@ -15,7 +15,7 @@ export default function ChartTooltip({
   labelPrefix = '',
   valuePrefix = ''
 }: TooltipProps) {
-  if (!active  !payload  !payload.length) return null
+  if (!active || !payload || !payload.length) return null
 
   const date = new Date(label || '').toLocaleDateString('en-NG', {
     weekday: 'short',
