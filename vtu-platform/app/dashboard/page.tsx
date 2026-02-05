@@ -1,26 +1,28 @@
-import StatCard from '@/components/admin/StatCard'
-import { requireUser } from '@/lib/auth/requireUser'
-import supabaseAdmin from '@/lib/supabase/admin'
+import { cookies } from 'next/headers'
+import { createServerClient } from '@supabase/ssr'
 
-export default async function UserDashboard() {
-  const user = await requireUser()
+export async function requireUser() {
+  const cookieStore = cookies()
 
-  const { data: wallet } = await supabaseAdmin
-    .from('wallets')
-    .select('balance')
-    .eq('user_id', user.id)
-    .single()
-
-  return (
-    <div className="space-y-6">
-      <h1 className="text-2xl font-bold">
-        Dashboard
-      </h1>
-
-      <StatCard
-        title="Wallet Balance"
-        value={`₦${(wallet?.balance ?? 0).toLocaleString()}`}
-      />
-    </div>
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        get(name: string) {
+          return cookieStore.get(name)?.value
+        }
+      }
+    }
   )
+
+  const {
+    data: { user }
+  } = await supabase.auth.getUser()
+
+  if (!user) {
+    throw new Error('Unauthorized')
+  }
+
+  return user
 }

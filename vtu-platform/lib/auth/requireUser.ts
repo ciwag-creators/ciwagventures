@@ -1,13 +1,17 @@
 import { cookies } from 'next/headers'
 import { createServerClient } from '@supabase/ssr'
 
-export async function requireAdmin() {
+export async function requireUser() {
+  const cookieStore = cookies()
+
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
       cookies: {
-        get: name => cookies().get(name)?.value
+        get(name: string) {
+          return cookieStore.get(name)?.value
+        }
       }
     }
   )
@@ -17,17 +21,7 @@ export async function requireAdmin() {
   } = await supabase.auth.getUser()
 
   if (!user) {
-    throw new Error('UNAUTHORIZED')
-  }
-
-  const { data: admin } = await supabase
-    .from('admins')
-    .select('id')
-    .eq('id', user.id)
-    .single()
-
-  if (!admin) {
-    throw new Error('FORBIDDEN')
+    throw new Error('Unauthorized')
   }
 
   return user
