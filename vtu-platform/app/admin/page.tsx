@@ -4,18 +4,26 @@ import DailyTransactions from '@/components/charts/DailyTransactions'
 import TransactionsTable from '@/components/charts/TransactionsTable'
 import { requireAdmin } from '@/lib/admin-auth'
 
-/* ---------------- TYPES ---------------- */
+/* ================= TYPES ================= */
+
 type RevenueItem = {
   date: string
   revenue: number
 }
 
-type TransactionItem = {
+type Transaction = {
+  id: string
+  amount: number
+  created_at: string
+}
+
+type DailyTransaction = {
   date: string
   total: number
 }
 
-/* ---------------- FETCH STATS ---------------- */
+/* ================= FETCH FUNCTIONS ================= */
+
 async function getAdminStats() {
   const res = await fetch(
     `${process.env.NEXT_PUBLIC_BASE_URL}/api/admin/stats`,
@@ -29,7 +37,7 @@ async function getAdminStats() {
   return res.json()
 }
 
-async function getRecentTransactions() {
+async function getRecentTransactions(): Promise<Transaction[]> {
   const res = await fetch(
     `${process.env.NEXT_PUBLIC_BASE_URL}/api/admin/transactions`,
     { cache: 'no-store' }
@@ -40,34 +48,53 @@ async function getRecentTransactions() {
   }
 
   const json = await res.json()
-  return json.data
+  return json.data as Transaction[]
 }
 
-/* ---------------- PAGE ---------------- */
+/* ================= PAGE ================= */
+
 export default async function AdminDashboard() {
-  // 🔐 Protect page
   await requireAdmin()
 
   const stats = await getAdminStats()
   const transactions = await getRecentTransactions()
 
+  /* ---------- Revenue Chart Data ---------- */
   const revenueData: RevenueItem[] = stats.daily_revenue.map(
-    (d: any) => ({
-      date: d.date,
-      revenue: d.total
+    (item: any) => ({
+      date: item.date,
+      revenue: item.total,
     })
   )
 
-  const transactionData: TransactionItem[] =
-    stats.daily_transactions
+  /* ---------- Daily Transactions Data ---------- */
+  const dailyData: DailyTransaction[] = transactions.reduce(
+    (acc: DailyTransaction[], transaction) => {
+      const date = new Date(transaction.created_at)
+        .toISOString()
+        .split('T')[0]
+
+      const existing = acc.find(item => item.date === date)
+
+      if (existing) {
+        existing.total += transaction.amount
+      } else {
+        acc.push({
+          date,
+          total: transaction.amount,
+        })
+      }
+
+      return acc
+    },
+    []
+  )
 
   return (
     <div className="space-y-10">
-      <h1 className="text-2xl font-bold">
-        Admin Dashboard
-      </h1>
+      <h1 className="text-2xl font-bold">Admin Dashboard</h1>
 
-      {/* ---------- STATS CARDS ---------- */}
+      {/* ================= STAT CARDS ================= */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard
           title="Total Transactions"
@@ -76,7 +103,7 @@ export default async function AdminDashboard() {
 
         <StatCard
           title="Total Revenue"
-          value={`₦${stats.total_revenue.toLocaleString()}`}
+          value={`₦${Number(stats.total_revenue).toLocaleString()}`}
         />
 
         <StatCard
@@ -90,7 +117,7 @@ export default async function AdminDashboard() {
         />
       </div>
 
-      {/* ---------- CHARTS ---------- */}
+      {/* ================= CHARTS ================= */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div className="bg-white rounded-xl shadow p-4">
           <h2 className="text-lg font-semibold mb-4">
@@ -103,11 +130,11 @@ export default async function AdminDashboard() {
           <h2 className="text-lg font-semibold mb-4">
             Daily Transactions
           </h2>
-          <DailyTransactions data={transactionData} />
+          <DailyTransactions data={dailyData} />
         </div>
       </div>
 
-      {/* ---------- TRANSACTIONS TABLE ---------- */}
+      {/* ================= RECENT TRANSACTIONS TABLE ================= */}
       <div className="bg-white rounded-xl shadow p-4">
         <h2 className="text-lg font-semibold mb-4">
           Recent Transactions

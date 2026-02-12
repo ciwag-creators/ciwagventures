@@ -2,13 +2,28 @@ import supabaseAdmin from '@/lib/supabase/admin'
 import { logWalletAction } from '@/lib/vtu/audit'
 import vtuProvider from '@/lib/vtu'
 
+interface AirtimeRequestBody {
+  user_id: string
+  network: string
+  phone: string
+  amount: number
+  reference: string
+}
+
 export async function POST(req: Request) {
   try {
-    const body = await req.json()
+    const body: AirtimeRequestBody = await req.json()
+
     const { user_id, network, phone, amount, reference } = body
 
     /* ---------------- VALIDATION ---------------- */
-    if (!user_id || !network || !phone || !amount || !reference) {
+    if (
+      !user_id ||
+      !network ||
+      !phone ||
+      !amount ||
+      !reference
+    ) {
       return Response.json(
         { error: 'Missing required fields' },
         { status: 400 }
@@ -16,13 +31,13 @@ export async function POST(req: Request) {
     }
 
     /* ---------------- FETCH WALLET ---------------- */
-    const { data: wallet } = await supabaseAdmin
+    const { data: wallet, error: walletError } = await supabaseAdmin
       .from('wallets')
       .select('*')
       .eq('user_id', user_id)
       .single()
 
-    if (!wallet) {
+    if (walletError || !wallet) {
       return Response.json({ error: 'Wallet not found' }, { status: 404 })
     }
 
@@ -33,7 +48,7 @@ export async function POST(req: Request) {
       )
     }
 
-    /* ---------------- IDEMPOTENCY ---------------- */
+    /* ---------------- IDEMPOTENCY CHECK ---------------- */
     const { data: existingTx } = await supabaseAdmin
       .from('transactions')
       .select('*')
@@ -77,11 +92,11 @@ export async function POST(req: Request) {
         .eq('id', wallet.id)
 
       /* ---------------- VTU PROVIDER ---------------- */
-      const providerResult = await vtuProvider.airtime({
+      const providerResult = await vtuProvider.purchaseAirtime({
         network,
         phone,
         amount,
-        reference
+
       })
 
       if (!providerResult.success) {
@@ -145,8 +160,11 @@ export async function POST(req: Request) {
       )
     }
 
-  } catch (err) {
+    } catch (err) {
     console.error('❌ Server error:', err)
-    return Response.json({ error: 'Server error' }, { status: 500 })
+    return Response.json(
+      { error: 'Server error' },
+      { status: 500 }
+    )
   }
 }

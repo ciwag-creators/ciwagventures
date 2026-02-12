@@ -1,25 +1,27 @@
-import { VTUProvider, AirtimePayload, DataPayload } from './types'
+import {
+  VTUProvider,
+  AirtimePayload,
+  DataPayload,
+  VTUResponse,
+} from './types'
 
 export class CheapDataHubProvider implements VTUProvider {
 
-  async airtime(payload: AirtimePayload) {
-    /**
-     * 🔧 Replace with real API call later
-     */
-    console.log('CheapDataHub airtime:', payload)
-
+  async purchaseAirtime(
+    payload: AirtimePayload
+  ): Promise<VTUResponse> {
     return {
       success: true,
-      provider_reference: `CDH-AIR-${Date.now()}`
+      message: 'Airtime purchase successful',
     }
   }
 
-  async data(payload: DataPayload) {
-    console.log('CheapDataHub data:', payload)
-
+  async purchaseData(
+    payload: DataPayload
+  ): Promise<VTUResponse> {
     return {
       success: true,
-      provider_reference: `CDH-DATA-${Date.now()}`
+      message: 'Data purchase successful',
     }
   }
 }

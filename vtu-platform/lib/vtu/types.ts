@@ -1,32 +1,33 @@
-export interface AirtimeRequest {
-  network: string
+// lib/vtu/types.ts
+
+export interface AirtimePayload {
   phone: string
+  network: string
   amount: number
-  reference: string
 }
 
-export interface DataRequest {
-  network: string
+export interface DataPayload {
   phone: string
-  planId: string
-  amount: number
-  reference: string
+  network: string
+  plan: string
 }
 
-export interface BillRequest {
-  service: 'electricity' | 'tv'
-  provider: string
-  meterNumber?: string
-  smartCardNumber?: string
-  amount: number
-  reference: string
-}
+/* ========= Provider Response ========= */
 
 export interface VTUResponse {
   success: boolean
   message?: string
+
+  // Transaction identifiers
+  reference?: string
+  token?: string
+
+  // Pricing (needed for profit calculation)
   cost_price?: number
   fee?: number
-  token?: string
-  raw?: any
+}
+  
+export interface VTUProvider {
+  purchaseAirtime(payload: AirtimePayload): Promise<VTUResponse>
+  purchaseData(payload: DataPayload): Promise<VTUResponse>
 }

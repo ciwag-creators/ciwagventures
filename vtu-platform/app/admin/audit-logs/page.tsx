@@ -1,28 +1,12 @@
-import AuditLogsTable from '@/components/admin/AuditLogsTable'
+import { requireAdmin } from '@/lib/admin-auth'
 
-async function getAuditLogs() {
-  const res = await fetch('/api/admin/audit-logs', {
-    cache: 'no-store'
-  })
-
-  if (!res.ok) {
-    throw new Error('Failed to fetch audit logs')
-  }
-
-  const json = await res.json()
-  return json.data
-}
-
-export default async function AdminAuditLogs() {
-  const logs = await getAuditLogs()
+export default async function AuditLogsPage() {
+  await requireAdmin()
 
   return (
-    <div className="space-y-6">
+    <div>
       <h1 className="text-2xl font-bold">Audit Logs</h1>
-
-      <div className="bg-white rounded-xl shadow p-4">
-        <AuditLogsTable data={logs} />
-      </div>
+      <p className="text-gray-500">Coming soon…</p>
     </div>
   )
 }

@@ -1,39 +1,45 @@
 import {
-  AirtimeRequest,
-  DataRequest,
-  BillRequest,
+  VTUProvider,
+  AirtimePayload,
+  DataPayload,
   VTUResponse
 } from './types'
 
+import { CheapDataHubProvider } from './cheapdatahub'
+
+/**
+ * Resolve active VTU provider
+ */
+export function getActiveProvider(): VTUProvider {
+  return new CheapDataHubProvider()
+}
+
+/**
+ * Airtime purchase
+ */
+export async function purchaseAirtime(
+  payload: AirtimePayload
+): Promise<VTUResponse> {
+  const provider = getActiveProvider()
+  return provider.purchaseAirtime(payload)
+}
+
+/**
+ * Data purchase (NO amount here)
+ */
+export async function purchaseData(
+  payload: DataPayload
+): Promise<VTUResponse> {
+  const provider = getActiveProvider()
+  return provider.purchaseData(payload)
+}
+
+/**
+ * Default export (used by API routes)
+ */
 const vtuProvider = {
-  async airtime(payload: AirtimeRequest): Promise<VTUResponse> {
-    // mock provider
-    return {
-      success: true,
-      message: 'Airtime sent',
-      cost_price: payload.amount - 20,
-      fee: 10
-    }
-  },
-
-  async data(payload: DataRequest): Promise<VTUResponse> {
-    return {
-      success: true,
-      message: 'Data sent',
-      cost_price: payload.amount - 30,
-      fee: 15
-    }
-  },
-
-  async bill(payload: BillRequest): Promise<VTUResponse> {
-    return {
-      success: true,
-      message: 'Bill payment successful',
-      token: '1234-5678-9012',
-      cost_price: payload.amount - 50,
-      fee: 20
-    }
-  }
+  purchaseAirtime,
+  purchaseData
 }
 
 export default vtuProvider

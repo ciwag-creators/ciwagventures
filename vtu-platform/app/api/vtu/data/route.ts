@@ -4,25 +4,44 @@ import vtuProvider from '@/lib/vtu'
 
 export async function POST(req: Request) {
   try {
-    /* ---------------- 0. PARSE BODY ---------------- */
     const body = await req.json()
-    const { user_id, network, phone, planId, amount, reference } = body
 
-    if (!user_id || !network || !phone || !planId || !amount || !reference) {
+    /* ---------------- PARSE ---------------- */
+    const user_id: string = body.user_id
+    const network: string = body.network
+    const phone: string = body.phone
+    const plan: string = body.plan
+    const reference: string = body.reference
+
+    /* ---------------- VALIDATION ---------------- */
+    if (!user_id || !network || !phone || !plan || !reference) {
       return Response.json(
         { error: 'Missing required fields' },
         { status: 400 }
       )
     }
 
-    /* ---------------- 1. FETCH WALLET ---------------- */
-    const { data: wallet, error: walletError } = await supabaseAdmin
+    /* ---------------- FETCH PLAN ---------------- */
+    const { data: dataPlan } = await supabaseAdmin
+      .from('data_plans')
+      .select('*')
+      .eq('id', plan)
+      .single()
+
+    if (!dataPlan) {
+      return Response.json({ error: 'Invalid data plan' }, { status: 400 })
+    }
+
+    const amount: number = dataPlan.price
+
+    /* ---------------- FETCH WALLET ---------------- */
+    const { data: wallet } = await supabaseAdmin
       .from('wallets')
       .select('*')
       .eq('user_id', user_id)
       .single()
 
-    if (walletError || !wallet) {
+    if (!wallet) {
       return Response.json({ error: 'Wallet not found' }, { status: 404 })
     }
 
@@ -33,7 +52,7 @@ export async function POST(req: Request) {
       )
     }
 
-    /* ---------------- 2. IDEMPOTENCY CHECK ---------------- */
+    /* ---------------- IDEMPOTENCY ---------------- */
     const { data: existingTx } = await supabaseAdmin
       .from('transactions')
       .select('*')
@@ -43,96 +62,84 @@ export async function POST(req: Request) {
     if (existingTx) {
       return Response.json({
         success: existingTx.status === 'success',
-        reference: existingTx.reference,
+        reference,
         status: existingTx.status,
         new_balance: wallet.balance
       })
     }
 
-    /* ---------------- 3. CREATE TRANSACTION ---------------- */
-    const { data: transaction, error: txError } = await supabaseAdmin
+    /* ---------------- CREATE TRANSACTION ---------------- */
+    const { data: transaction } = await supabaseAdmin
       .from('transactions')
       .insert({
         user_id,
-        amount,
         service: 'data',
+        amount,
         status: 'pending',
-        reference,
-        metadata: { network, phone, planId }
+        reference
       })
       .select()
       .single()
 
-    if (txError || !transaction) {
-      return Response.json(
-        { error: 'Failed to create transaction' },
-        { status: 500 }
-      )
-    }
-
     try {
-      /* ---------------- 4. DEDUCT WALLET ---------------- */
-      const balanceBefore = wallet.balance
-      const balanceAfter = wallet.balance - amount
-
+      /* ---------------- DEDUCT WALLET ---------------- */
       await supabaseAdmin
         .from('wallets')
-        .update({ balance: balanceAfter })
+        .update({ balance: wallet.balance - amount })
         .eq('id', wallet.id)
 
-      await logWalletAction({
-        user_id,
-        action: 'data_debit',
-        amount,
-        balance_before: balanceBefore,
-        balance_after: balanceAfter,
-        reference,
-        metadata: { network, phone, planId }
-      })
-
-      /* ---------------- 5. VTU PROVIDER ---------------- */
-      const result = await vtuProvider.data({
+      /* ---------------- VTU PROVIDER ---------------- */
+      const providerResult = await vtuProvider.purchaseData({
         network,
         phone,
-        planId,
-        amount,
-        reference
+        plan
       })
 
-      if (!result.success) {
-        throw new Error('VTU_PROVIDER_FAILED')
+      if (!providerResult.success) {
+        throw new Error('VTU_FAILED')
       }
 
-      /* ---------------- 6. MARK SUCCESS ---------------- */
+      /* ---------------- PROFIT ---------------- */
+      const cost_price = providerResult.cost_price ?? amount
+      const fee = providerResult.fee ?? 0
+      const profit = amount - cost_price - fee
+
+      /* ---------------- MARK SUCCESS ---------------- */
       await supabaseAdmin
         .from('transactions')
-        .update({ status: 'success' })
+        .update({
+          status: 'success',
+          cost_price,
+          fee,
+          profit
+        })
         .eq('id', transaction.id)
+
+      /* ---------------- AUDIT ---------------- */
+      await logWalletAction({
+        user_id,
+        action: 'data_purchase',
+        amount,
+        balance_before: wallet.balance,
+        balance_after: wallet.balance - amount,
+        reference,
+        metadata: { network, phone, plan }
+      })
 
       return Response.json({
         success: true,
         reference,
-        new_balance: balanceAfter
+        new_balance: wallet.balance - amount
       })
 
     } catch (err) {
-      console.error('❌ VTU failed, refunding...', err)
+      console.error('❌ Data VTU failed:', err)
 
-      /* ---------------- 7. REFUND ---------------- */
+      /* ---------------- REFUND ---------------- */
       await supabaseAdmin
         .from('wallets')
         .update({ balance: wallet.balance })
         .eq('id', wallet.id)
-
-      await logWalletAction({
-        user_id,
-        action: 'data_refund',
-        amount,
-        balance_before: wallet.balance - amount,
-        balance_after: wallet.balance,
-        reference,
-        metadata: { reason: 'VTU_PROVIDER_FAILED' }
-      })
 
       await supabaseAdmin
         .from('transactions')
@@ -140,12 +147,12 @@ export async function POST(req: Request) {
         .eq('id', transaction.id)
 
       return Response.json(
-        { error: 'VTU failed. Wallet refunded.' },
+        { error: 'Transaction failed. Wallet refunded.' },
         { status: 500 }
       )
     }
 
-  } catch (err) {
+    } catch (err) {
     console.error('❌ Server error:', err)
     return Response.json({ error: 'Server error' }, { status: 500 })
   }

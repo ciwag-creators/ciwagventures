@@ -1,67 +1,44 @@
 'use client'
 
-import StatusBadge from '@/components/admin/StatusBadge'
-
 type Transaction = {
   id: string
-  reference: string
-  service: string
   amount: number
-  status: string
   created_at: string
 }
 
-export default function TransactionsTable({
-  data
-}: {
+interface Props {
   data: Transaction[]
-}) {
-  // ✅ EMPTY STATE
+}
+
+export default function TransactionsTable({ data }: Props) {
   if (!data || data.length === 0) {
     return (
-      <div className="py-12 text-center text-gray-500">
-        No transactions yet
+      <div className="text-sm text-gray-500">
+        No transactions available
       </div>
     )
   }
 
   return (
     <div className="overflow-x-auto">
-      <table className="min-w-full border-collapse">
-        <thead>
-          <tr className="border-b bg-gray-50 text-left text-sm text-gray-600">
-            <th className="px-4 py-3">Reference</th>
-            <th className="px-4 py-3">Service</th>
-            <th className="px-4 py-3">Amount</th>
-            <th className="px-4 py-3">Status</th>
-            <th className="px-4 py-3">Date</th>
+      <table className="min-w-full border border-gray-200 text-sm">
+        <thead className="bg-gray-100">
+          <tr>
+            <th className="p-2 text-left">ID</th>
+            <th className="p-2 text-left">Amount</th>
+            <th className="p-2 text-left">Date</th>
           </tr>
         </thead>
 
         <tbody>
-          {data.map(tx => (
-            <tr
-              key={tx.id}
-              className="border-b text-sm transition hover:bg-gray-50"
-            >
-              <td className="px-4 py-3 font-mono text-xs">
-                {tx.reference}
+          {data.map((transaction) => (
+            <tr key={transaction.id} className="border-t">
+              <td className="p-2">{transaction.id}</td>
+              <td className="p-2">
+                ₦{transaction.amount.toLocaleString()}
               </td>
-
-              <td className="px-4 py-3 capitalize">
-                {tx.service}
-              </td>
-
-              <td className="px-4 py-3 font-medium">
-                ₦{tx.amount.toLocaleString()}
-              </td>
-
-              <td className="px-4 py-3">
-                <StatusBadge status={tx.status} />
-              </td>
-
-              <td className="px-4 py-3 text-gray-500">
-                {new Date(tx.created_at).toLocaleDateString()}
+              <td className="p-2">
+                {new Date(transaction.created_at).toLocaleDateString()}
               </td>
             </tr>
           ))}

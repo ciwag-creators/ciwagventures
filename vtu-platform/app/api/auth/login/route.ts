@@ -1,10 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createSupabaseServerClient } from '@/lib/supabase/server'
+import { supabaseServer } from '@/lib/supabase/server'
 
 export async function POST(req: NextRequest) {
   const { email, password } = await req.json()
 
-  const supabase = await createSupabaseServerClient()
+  if (!email || !password) {
+    return NextResponse.json(
+      { error: 'Missing credentials' },
+      { status: 400 }
+    )
+  }
+
+  const supabase = await supabaseServer()
 
   const { data, error } = await supabase.auth.signInWithPassword({
     email,
@@ -18,5 +25,7 @@ export async function POST(req: NextRequest) {
     )
   }
 
-  return NextResponse.json({ user: data.user })
+  return NextResponse.json({
+    user: data.user
+  })
 }
