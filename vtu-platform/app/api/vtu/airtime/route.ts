@@ -13,37 +13,12 @@ interface AirtimeRequestBody {
 export async function POST(req: Request) {
   try {
     const body: AirtimeRequestBody = await req.json()
-
     const { user_id, network, phone, amount, reference } = body
 
     /* ---------------- VALIDATION ---------------- */
-    if (
-      !user_id ||
-      !network ||
-      !phone ||
-      !amount ||
-      !reference
-    ) {
+    if (!user_id || !network || !phone || !amount || !reference) {
       return Response.json(
         { error: 'Missing required fields' },
-        { status: 400 }
-      )
-    }
-
-    /* ---------------- FETCH WALLET ---------------- */
-    const { data: wallet, error: walletError } = await supabaseAdmin
-      .from('wallets')
-      .select('*')
-      .eq('user_id', user_id)
-      .single()
-
-    if (walletError || !wallet) {
-      return Response.json({ error: 'Wallet not found' }, { status: 404 })
-    }
-
-    if (wallet.balance < amount) {
-      return Response.json(
-        { error: 'Insufficient balance' },
         { status: 400 }
       )
     }
@@ -59,44 +34,49 @@ export async function POST(req: Request) {
       return Response.json({
         success: existingTx.status === 'success',
         reference: existingTx.reference,
-        status: existingTx.status,
-        new_balance: wallet.balance
+        status: existingTx.status
       })
     }
 
-    /* ---------------- CREATE TRANSACTION ---------------- */
-    const { data: transaction, error: txError } = await supabaseAdmin
-      .from('transactions')
-      .insert({
-        user_id,
-        amount,
-        service: 'airtime',
-        status: 'pending',
-        reference
-      })
-      .select()
-      .single()
+    /* ---------------- ATOMIC DEBIT (DB FUNCTION) ---------------- */
+    const { data, error } = await supabaseAdmin.rpc(
+      'process_airtime_purchase',
+      {
+        p_user_id: user_id,
+        p_amount: amount,
+        p_reference: reference,
+      }
+    )
 
-    if (txError || !transaction) {
+    if (error) {
+      if (error.message.includes('INSUFFICIENT_FUNDS')) {
+        return Response.json(
+          { error: 'Insufficient balance' },
+          { status: 400 }
+        )
+      }
+
+      if (error.message.includes('WALLET_NOT_FOUND')) {
+        return Response.json(
+          { error: 'Wallet not found' },
+          { status: 404 }
+        )
+      }
+
       return Response.json(
-        { error: 'Failed to create transaction' },
+        { error: 'Transaction failed' },
         { status: 500 }
       )
     }
 
-    try {
-      /* ---------------- DEDUCT WALLET ---------------- */
-      await supabaseAdmin
-        .from('wallets')
-        .update({ balance: wallet.balance - amount })
-        .eq('id', wallet.id)
+    const { transaction_id, new_balance } = data
 
-      /* ---------------- VTU PROVIDER ---------------- */
+    try {
+      /* ---------------- VTU PROVIDER CALL ---------------- */
       const providerResult = await vtuProvider.purchaseAirtime({
         network,
         phone,
         amount,
-
       })
 
       if (!providerResult.success) {
@@ -117,15 +97,15 @@ export async function POST(req: Request) {
           fee,
           profit
         })
-        .eq('id', transaction.id)
+        .eq('id', transaction_id)
 
       /* ---------------- AUDIT LOG ---------------- */
       await logWalletAction({
         user_id,
         action: 'airtime_purchase',
         amount,
-        balance_before: wallet.balance,
-        balance_after: wallet.balance - amount,
+        balance_before: new_balance + amount,
+        balance_after: new_balance,
         reference,
         metadata: {
           network,
@@ -137,22 +117,22 @@ export async function POST(req: Request) {
         success: true,
         reference,
         profit,
-        new_balance: wallet.balance - amount
+        new_balance
       })
 
-    } catch (err) {
-      console.error('❌ VTU failed, refunding...', err)
+    } catch (providerError) {
+      console.error('❌ Provider failed:', providerError)
 
-      /* ---------------- REFUND ---------------- */
-      await supabaseAdmin
-        .from('wallets')
-        .update({ balance: wallet.balance })
-        .eq('id', wallet.id)
+      /* ---------------- REFUND SAFELY ---------------- */
+      await supabaseAdmin.rpc('refund_wallet_balance', {
+        p_user_id: user_id,
+        p_amount: amount
+      })
 
       await supabaseAdmin
         .from('transactions')
         .update({ status: 'failed' })
-        .eq('id', transaction.id)
+        .eq('id', transaction_id)
 
       return Response.json(
         { error: 'Transaction failed. Wallet refunded.' },
@@ -160,7 +140,7 @@ export async function POST(req: Request) {
       )
     }
 
-    } catch (err) {
+  } catch (err) {
     console.error('❌ Server error:', err)
     return Response.json(
       { error: 'Server error' },
