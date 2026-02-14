@@ -1,28 +1,25 @@
-import WalletsTable from '@/components/admin/WalletsTable'
+export const dynamic = "force-dynamic";
 
 async function getWallets() {
-  const res = await fetch('/api/admin/wallets', {
-    cache: 'no-store'
-  })
+  const res = await fetch(
+    `${process.env.NEXT_PUBLIC_BASE_URL}/api/admin/wallets`
+  );
 
   if (!res.ok) {
-    throw new Error('Failed to fetch wallets')
+    return [];
   }
 
-  const json = await res.json()
-  return json.data
+  const json = await res.json();
+  return json.data ?? [];
 }
 
-export default async function AdminWallets() {
-  const wallets = await getWallets()
+export default async function WalletsPage() {
+  const wallets = await getWallets();
 
   return (
-    <div className="space-y-6">
-      <h1 className="text-2xl font-bold">Wallets</h1>
-
-      <div className="bg-white rounded-xl shadow p-4">
-        <WalletsTable data={wallets} />
-      </div>
+    <div>
+      <h1>Wallets</h1>
+      <pre>{JSON.stringify(wallets, null, 2)}</pre>
     </div>
-  )
+  );
 }

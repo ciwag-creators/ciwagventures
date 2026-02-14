@@ -1,28 +1,25 @@
-import TransactionsTable from '@/components/charts/TransactionsTable'
+export const dynamic = "force-dynamic";
 
 async function getTransactions() {
-  const res = await fetch('/api/admin/transactions', {
-    cache: 'no-store'
-  })
+  const res = await fetch(
+ `${process.env.NEXT_PUBLIC_BASE_URL}/api/admin/transactions`,
+  );
 
   if (!res.ok) {
-    throw new Error('Failed to fetch transactions')
+    return [];
   }
 
-  const json = await res.json()
-  return json.data
+  const json = await res.json();
+  return json.data ?? [];
 }
 
-export default async function AdminTransactions() {
-  const transactions = await getTransactions()
+export default async function TransactionsPage() {
+  const transactions = await getTransactions();
 
   return (
-    <div className="space-y-6">
-      <h1 className="text-2xl font-bold">Transactions</h1>
-
-      <div className="bg-white rounded-xl shadow p-4">
-        <TransactionsTable data={transactions} />
-      </div>
+    <div>
+      <h1>Transactions</h1>
+      <pre>{JSON.stringify(transactions, null, 2)}</pre>
     </div>
-  )
+  );
 }

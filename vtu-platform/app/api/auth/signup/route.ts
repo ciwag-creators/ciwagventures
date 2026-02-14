@@ -1,31 +1,40 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseServer } from '@/lib/supabase/server'
+import supabaseServer from '@/lib/supabase/server'
 
 export async function POST(req: NextRequest) {
-  const { email, password } = await req.json()
+  try {
+    const { email, password } = await req.json()
 
-  if (!email || !password) {
+    if (!email || !password) {
+      return NextResponse.json(
+        { error: 'Email and password required' },
+        { status: 400 }
+      )
+    }
+
+    const { data, error } =
+      await supabaseServer.auth.admin.createUser({
+        email,
+        password,
+        email_confirm: true,
+      })
+
+    if (error) {
+      return NextResponse.json(
+        { error: error.message },
+        { status: 400 }
+      )
+    }
+
+    return NextResponse.json({
+      success: true,
+      user: data.user,
+    })
+
+  } catch {
     return NextResponse.json(
-      { error: 'Missing credentials' },
-      { status: 400 }
+      { error: 'Server error' },
+      { status: 500 }
     )
   }
-
-  const supabase = await supabaseServer()
-
-  const { data, error } = await supabase.auth.signUp({
-    email,
-    password
-  })
-
-  if (error) {
-    return NextResponse.json(
-      { error: error.message },
-      { status: 400 }
-    )
-  }
-
-  return NextResponse.json({
-    user: data.user
-  })
 }
